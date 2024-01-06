@@ -1,0 +1,17 @@
+name: lu7rtp
+version: '1.0-SNAPSHOT'
+main: com.lu7rtp.lu7rtp.RTP
+author: 'Andrew Peacock'
+description: An ultra basic RTP plugin.
+api-version: '1.20'
+
+permissions:
+  lu7rtp.teleport:
+    description: Permission to use the /rtp command.
+    default: true
+
+commands:
+  rtp:
+    description: Teleport yourself to a random location
+    usage: /rtp
+    permission: lu7rtp.teleport
