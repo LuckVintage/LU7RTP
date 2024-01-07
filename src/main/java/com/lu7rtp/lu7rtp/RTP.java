@@ -2,12 +2,17 @@ package com.lu7rtp.lu7rtp;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.boss.BarColor;
+import org.bukkit.boss.BarStyle;
+import org.bukkit.boss.BossBar;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bstats.bukkit.Metrics;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -18,6 +23,7 @@ public class RTP extends JavaPlugin {
 
 	private Map<String, Long> cooldowns = new HashMap<>();
 	private FileConfiguration config;
+	private BossBar godModeBossBar;
 
 	// Helper method to load the config
 	private void loadConfig() {
@@ -27,11 +33,14 @@ public class RTP extends JavaPlugin {
 
 	@Override
 	public void onEnable() {
-
 		loadConfig(); // Load the config
 
 		// Log successful enable
 		getLogger().log(Level.INFO, "LU7 RTP plugin has been enabled!");
+
+		// Initialize godModeBossBar
+		godModeBossBar = Bukkit.createBossBar("", BarColor.WHITE, BarStyle.SOLID);
+		godModeBossBar.setVisible(false);
 
 		// Start bStats
 		if (config.getBoolean("enablebStats", true)) {
@@ -45,6 +54,7 @@ public class RTP extends JavaPlugin {
 	@Override
 	public void onDisable() {
 		getLogger().info("LU7 RTP Plugin has been disabled!");
+		removeAllBossBars();
 	}
 
 	@Override
@@ -58,7 +68,7 @@ public class RTP extends JavaPlugin {
 
 		if (label.equalsIgnoreCase("rtp")) {
 			if (cooldowns.containsKey(player.getName())) {
-				long secondsLeft = (cooldowns.get(player.getName()) / 1000) + 60 - (System.currentTimeMillis() / 1000);
+				long secondsLeft = (cooldowns.get(player.getName()) / 1000) + 65 - (System.currentTimeMillis() / 1000);
 				if (secondsLeft > 0) {
 					player.sendMessage(colorize("&9&l[&6&lL&a&lU&e&l7&c&l RTP&9&l] &cYou must wait " + secondsLeft
 							+ " seconds before using RTP again."));
@@ -90,49 +100,73 @@ public class RTP extends JavaPlugin {
 	}
 
 	private void teleportRandomly(final Player player) {
-		Random random = new Random();
-		int maxAttempts = 10; // Number of attempts to find a safe location
-		int godModeDuration = 30; // Duration of god mode in seconds
+	    Random random = new Random();
+	    int maxAttempts = 10; // Number of attempts to find a safe location
+	    int godModeDuration = 60; // Duration of god mode in seconds
 
-		for (int i = 0; i < maxAttempts; i++) {
-			double x = random.nextInt(40000) - 20000;
-			double z = random.nextInt(40000) - 20000;
+	    // Display the searching message
+	    player.sendTitle(colorize("&aSearching for safe location..."), colorize("&fPlease wait"), 10, 40, 10);
 
-			Location randomLocation = new Location(Bukkit.getWorlds().get(0), x, 0, z);
+	    for (int i = 0; i < maxAttempts; i++) {
+	        double x = random.nextInt(40000) - 20000;
+	        double z = random.nextInt(40000) - 20000;
 
-			// Load the chunks at the random location
-			randomLocation.getChunk().load();
+	        Location randomLocation = new Location(Bukkit.getWorlds().get(0), x, 0, z);
 
-			// Check if the location is safe (e.g., not in water or lava)
-			if (isSafeLocation(randomLocation)) {
-				// Find a safe location above the water surface
-				Location aboveWater = findSafeLocationAboveWater(randomLocation);
+	        // Load the chunks at the random location
+	        randomLocation.getChunk().load();
 
-				if (aboveWater != null) {
-					// Temporarily give the player god mode
-					player.setInvulnerable(true);
+	        // Check if the location is safe (e.g., not in water or lava)
+	        if (isSafeLocation(randomLocation)) {
+	            // Find a safe location above the water surface
+	            Location aboveWater = findSafeLocationAboveWater(randomLocation);
 
-					// Teleport the player to the safe location
-					player.teleport(aboveWater);
+	            if (aboveWater != null) {
+	                // Ensure the player is not spawning underwater
+	                if (isUnderwater(aboveWater)) {
+	                    continue; // Skip this iteration and try another location
+	                }
 
-					// Schedule a task to remove god mode after a few seconds
-					Bukkit.getScheduler().runTaskLater(this, () -> {
-						if (player.isOnline()) {
-							player.sendMessage(colorize(
-									"&9&l[&6&lL&a&lU&e&l7&c&l RTP&9&l] &cYour teleport protection has expired!"));
-							player.setInvulnerable(false);
-						}
-					}, godModeDuration * 20); // Convert seconds to ticks
+	                // Temporarily give the player god mode
+	                player.setInvulnerable(true);
 
-					return; // Ensure the method exits after teleporting the player
-				}
-			}
-		}
+	                // Display the "Teleporting..." message with a delay
+	                Bukkit.getScheduler().runTaskLater(this, () ->
+	                        player.sendTitle(colorize("&aTeleporting..."), "", 10, 40, 10), 20); // Delay by 20 ticks (1 second)
 
-		// If no safe location is found after the maximum attempts, inform the player
-		player.sendMessage(
-				colorize("&9&l[&6&lL&a&lU&e&l7&c&l RTP&9&l] &cUnable to find a safe location. Please try again."));
+	                // Create a boss bar for god mode countdown
+	                createGodModeBossBar(player, godModeDuration);
+
+	                // Teleport the player to the safe location
+	                player.teleport(aboveWater);
+
+	                // Schedule a task to remove god mode after a few seconds
+	                Bukkit.getScheduler().runTaskLater(this, () -> {
+	                    if (player.isOnline()) {
+	                        player.sendMessage(colorize(
+	                                "&9&l[&6&lL&a&lU&e&l7&c&l RTP&9&l] &cYour teleport protection has expired!"));
+	                        player.setInvulnerable(false);
+
+	                        // Remove the boss bar when god mode expires
+	                        godModeBossBar.removeAll();
+	                    }
+	                }, godModeDuration * 20); // Convert seconds to ticks
+
+	                return; // Ensure the method exits after teleporting the player
+	            }
+	        }
+	    }
+
+	    // If no safe location is found after the maximum attempts, inform the player
+	    player.sendMessage(
+	            colorize("&9&l[&6&lL&a&lU&e&l7&c&l RTP&9&l] &cUnable to find a safe location. Please try again."));
 	}
+
+	private boolean isUnderwater(Location location) {
+	    // Check if the location is underwater
+	    return location.getBlock().isLiquid();
+	}
+
 
 	private Location findSafeLocationAboveWater(Location location) {
 		// Find a safe location above the water surface
@@ -145,6 +179,50 @@ public class RTP extends JavaPlugin {
 			location.add(0, 1, 0);
 		}
 		return null;
+	}
+
+	private void createGodModeBossBar(Player player, int duration) {
+		// Remove any existing boss bars
+		removeAllBossBars();
+
+		// Create a new boss bar
+		godModeBossBar = Bukkit.createBossBar(colorize("&6Teleport Protection: &c" + duration + "s &6remaining"),
+				BarColor.YELLOW, BarStyle.SOLID);
+		godModeBossBar.addPlayer(player);
+		godModeBossBar.setVisible(true);
+
+		// Update the boss bar every second
+		BukkitTask task = new BukkitRunnable() {
+			int remainingTime = duration;
+
+			@Override
+			public void run() {
+				remainingTime--;
+
+				if (!player.isOnline()) {
+					// Player logged out, cancel the task
+					this.cancel();
+					removeAllBossBars();
+					return;
+				}
+
+				if (remainingTime <= 0) {
+					// Remove the boss bar when the duration is over
+					removeAllBossBars();
+					this.cancel();
+				} else {
+					// Update the boss bar title
+					godModeBossBar.setTitle(colorize("&6Teleport Protection: &c" + remainingTime + "s &6remaining!"));
+				}
+			}
+		}.runTaskTimer(this, 20L, 20L);
+	}
+
+	private void removeAllBossBars() {
+		// Remove godModeBossBar if it's not null
+		if (godModeBossBar != null) {
+			godModeBossBar.removeAll();
+		}
 	}
 
 	private String colorize(String message) {
