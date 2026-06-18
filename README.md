@@ -5,3 +5,5 @@ LU7 RTP is a Minecraft 1.20 Plugin that allows players to use the command ``/rtp
 ## Installation
 
 Download the latest .jar from [here](https://github.com/LuckVintage/LU7RTP/raw/main/target/lu7rtp-1.0-SNAPSHOT.jar).
+
+# **!!! This plugin is no longer used and also no longer receives updates !!!**
